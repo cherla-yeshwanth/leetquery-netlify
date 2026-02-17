@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { useAuth as useClerkAuth, useClerk, useUser } from "@clerk/clerk-react";
 import * as api from "../services/api";
 
 interface UserProfile {
@@ -20,7 +21,7 @@ interface AuthContextType {
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, name: string) => Promise<void>;
-  signOut: () => void;
+  signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   updateUserStreak: () => Promise<void>;
   addUserXP: (xp: number) => Promise<void>;
@@ -30,77 +31,80 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const { isLoaded, isSignedIn, getToken } = useClerkAuth();
+  const { user: clerkUser } = useUser();
+  const { signOut: clerkSignOut } = useClerk();
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Load user profile on mount if authenticated
+  // Register Clerk token provider for backend API requests
   useEffect(() => {
-    if (api.isAuthenticated()) {
-      refreshProfile();
-    } else {
-      setLoading(false);
-    }
-  }, []);
+    api.setAuthTokenProvider(async () => {
+      if (!isLoaded || !isSignedIn) return null;
+      return await getToken();
+    });
 
-  const refreshProfile = async (clearOnFailure: boolean = true) => {
+    return () => api.setAuthTokenProvider(null);
+  }, [getToken, isLoaded, isSignedIn]);
+
+  // Load/clear user profile based on Clerk auth state
+  useEffect(() => {
+    if (!isLoaded) return;
+
+    if (!isSignedIn) {
+      setUser(null);
+      setLoading(false);
+      return;
+    }
+
+    refreshProfile();
+  }, [isLoaded, isSignedIn]);
+
+  const refreshProfile = async () => {
+    if (!isSignedIn) {
+      setUser(null);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       const { profile } = await api.getProfile();
       setUser(profile);
-    } catch (error: any) {
+    } catch (error) {
       console.error("Failed to load profile:", error);
-      // If token is invalid, expired, or unauthorized - clear auth and redirect
-      if (
-        clearOnFailure && (
-          error.message?.includes("Unauthorized") || 
-          error.message?.includes("401") ||
-          error.message?.includes("Invalid JWT") ||
-          error.message?.includes("JWT")
-        )
-      ) {
-        console.log("Invalid or expired token detected, clearing authentication");
-        api.signOut();
-        setUser(null);
+
+      // Fallback minimal profile from Clerk if backend profile call is unavailable
+      if (clerkUser) {
+        setUser({
+          userId: clerkUser.id,
+          email: clerkUser.primaryEmailAddress?.emailAddress || "",
+          name: clerkUser.fullName || clerkUser.username || "User",
+          currentStreak: 0,
+          longestStreak: 0,
+          totalXP: 0,
+          level: 1,
+          lastActiveDate: null,
+          achievements: [],
+          completedTopics: [],
+          createdAt: new Date().toISOString(),
+        });
       }
     } finally {
       setLoading(false);
     }
   };
 
-  const signIn = async (email: string, password: string) => {
-    try {
-      const { user: authUser } = await api.signIn(email, password);
-      
-      // Check if this is the admin user
-      if (email === "24eg110d55@anurag.edu.in" || email === "yeshwanth3979@gmail.com") {
-        localStorage.setItem("userRole", "admin");
-      }
-      
-      // Verify we have a token before fetching profile
-      if (!api.isAuthenticated()) {
-        throw new Error("Sign-in succeeded but no access token was received. Please try again.");
-      }
-      
-      // Don't clear auth on profile failure during sign-in (token is fresh)
-      await refreshProfile(false);
-    } catch (error) {
-      console.error("Sign in error:", error);
-      throw error;
-    }
+  const signIn = async (_email: string, _password: string) => {
+    throw new Error("Use Clerk Sign In screen at /login");
   };
 
-  const signUp = async (email: string, password: string, name: string) => {
-    try {
-      await api.signUp(email, password, name);
-      // Auto sign in after signup
-      await signIn(email, password);
-    } catch (error) {
-      console.error("Sign up error:", error);
-      throw error;
-    }
+  const signUp = async (_email: string, _password: string, _name: string) => {
+    throw new Error("Use Clerk Sign Up screen at /signup");
   };
 
-  const signOut = () => {
+  const signOut = async () => {
+    await clerkSignOut();
     api.signOut();
     setUser(null);
   };

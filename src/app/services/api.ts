@@ -8,8 +8,22 @@ if (!SUPABASE_PROJECT_ID || !SUPABASE_ANON_KEY) {
 const API_BASE = `https://${SUPABASE_PROJECT_ID}.supabase.co/functions/v1/make-server-19914029`;
 const DEBUG_API = import.meta.env.DEV;
 
+let authTokenProvider: (() => Promise<string | null>) | null = null;
+
+export function setAuthTokenProvider(provider: (() => Promise<string | null>) | null) {
+  authTokenProvider = provider;
+}
+
 // Helper to get access token from localStorage
-function getAccessToken(): string | null {
+async function getAccessToken(): Promise<string | null> {
+  if (authTokenProvider) {
+    try {
+      return await authTokenProvider();
+    } catch {
+      return null;
+    }
+  }
+
   return localStorage.getItem("accessToken");
 }
 
@@ -27,7 +41,7 @@ async function apiRequest(
   };
 
   if (useAuth) {
-    const token = getAccessToken();
+    const token = await getAccessToken();
     if (token) {
       // Send user's access token in a custom header (gateway only checks Authorization)
       headers["X-User-Token"] = token;
@@ -121,7 +135,7 @@ export function signOut() {
 }
 
 export function isAuthenticated(): boolean {
-  return !!getAccessToken();
+  return !!localStorage.getItem("accessToken");
 }
 
 // ==================== PROFILE API ====================
