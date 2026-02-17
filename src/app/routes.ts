@@ -37,7 +37,7 @@ export const router = createBrowserRouter([
         Component: Splash,
       },
       {
-        path: "/login",
+        path: "/login/*",
         Component: Login,
       },
       {
@@ -45,7 +45,7 @@ export const router = createBrowserRouter([
         Component: ResetUsers,
       },
       {
-        path: "/signup",
+        path: "/signup/*",
         Component: SignUp,
       },
       {
