@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router";
 import { Users, Activity, Award, TrendingUp, LogOut } from "lucide-react";
 import * as api from "../../services/api";
+import { useAuth } from "../../context/AuthContext";
 
 interface Stats {
   totalUsers: number;
@@ -51,15 +52,15 @@ const recentActivity = [
 
 export function AdminDashboard() {
   const navigate = useNavigate();
-  const adminEmail = localStorage.getItem("userEmail") || "Admin";
+  const { user, isSignedIn, signOut } = useAuth();
+  const adminEmail = user?.email || "Admin";
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchStats = async () => {
-      // Check if user is authenticated
-      if (!api.isAuthenticated()) {
+      if (!isSignedIn) {
         setError("Please sign in to access the admin dashboard");
         setLoading(false);
         return;
@@ -75,8 +76,9 @@ export function AdminDashboard() {
         
         // If unauthorized, sign out
         if (error.message?.includes("Unauthorized") || error.message?.includes("401") || error.message?.includes("Forbidden")) {
-          api.signOut();
+          await signOut();
           setError("Your session has expired. Please sign in again.");
+          navigate("/login", { replace: true });
         }
       } finally {
         setLoading(false);
@@ -84,11 +86,17 @@ export function AdminDashboard() {
     };
 
     fetchStats();
-  }, []);
+  }, [isSignedIn, navigate, signOut]);
 
-  const handleLogout = () => {
-    api.signOut();
-    navigate("/login");
+  const handleLogout = async () => {
+    try {
+      await signOut();
+    } catch (error) {
+      console.error("Logout failed, forcing local signout:", error);
+      api.signOut();
+    } finally {
+      navigate("/login", { replace: true });
+    }
   };
 
   const statsData = [
