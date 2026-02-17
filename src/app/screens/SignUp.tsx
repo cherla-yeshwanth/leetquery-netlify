@@ -1,7 +1,19 @@
 import { motion } from "motion/react";
+import { useEffect } from "react";
+import { useNavigate } from "react-router";
 import { SignUp as ClerkSignUp } from "@clerk/clerk-react";
+import { useAuth as useClerkAuth } from "@clerk/clerk-react";
 
 export function SignUp() {
+  const navigate = useNavigate();
+  const { isLoaded, isSignedIn } = useClerkAuth();
+
+  useEffect(() => {
+    if (isLoaded && isSignedIn) {
+      navigate("/splash", { replace: true });
+    }
+  }, [isLoaded, isSignedIn, navigate]);
+
   return (
     <div
       className="min-h-screen flex items-center justify-center px-6 py-12"
@@ -30,6 +42,9 @@ export function SignUp() {
             routing="path"
             signInUrl="/login"
             fallbackRedirectUrl="/splash"
+            forceRedirectUrl="/splash"
+            signInFallbackRedirectUrl="/splash"
+            signInForceRedirectUrl="/splash"
           />
         </div>
       </motion.div>

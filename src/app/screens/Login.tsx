@@ -1,8 +1,19 @@
+import { useEffect } from "react";
+import { useNavigate } from "react-router";
 import { SignIn } from "@clerk/clerk-react";
+import { useAuth as useClerkAuth } from "@clerk/clerk-react";
 import { useThemeEngine } from "../context/ThemeEngineContext";
 
 export default function Login() {
   const { currentTheme } = useThemeEngine();
+  const navigate = useNavigate();
+  const { isLoaded, isSignedIn } = useClerkAuth();
+
+  useEffect(() => {
+    if (isLoaded && isSignedIn) {
+      navigate("/splash", { replace: true });
+    }
+  }, [isLoaded, isSignedIn, navigate]);
 
   return (
     <div
@@ -34,7 +45,11 @@ export default function Login() {
             path="/login"
             routing="path"
             signUpUrl="/signup"
+            transferable={true}
             fallbackRedirectUrl="/splash"
+            forceRedirectUrl="/splash"
+            signUpFallbackRedirectUrl="/splash"
+            signUpForceRedirectUrl="/splash"
           />
         </div>
       </div>
