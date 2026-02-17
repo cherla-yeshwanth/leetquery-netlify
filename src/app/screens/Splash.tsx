@@ -1,37 +1,60 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router";
 import { motion } from "motion/react";
-import { useAuth as useClerkAuth } from "@clerk/clerk-react";
 import { useThemeEngine } from "../context/ThemeEngineContext";
+import { useAuth } from "../context/AuthContext";
+
+const AUTH_DEBUG = import.meta.env.DEV || import.meta.env.VITE_DEBUG_AUTH === "true";
+
+function authDebug(message: string, data?: unknown) {
+  if (!AUTH_DEBUG) return;
+  if (data !== undefined) {
+    console.log(`[AuthFlow][Splash] ${message}`, data);
+    return;
+  }
+  console.log(`[AuthFlow][Splash] ${message}`);
+}
 
 export function Splash() {
   const navigate = useNavigate();
   const { currentTheme } = useThemeEngine();
-  const { isLoaded, isSignedIn } = useClerkAuth();
+  const { isClerkLoaded, isSignedIn, role } = useAuth();
 
   useEffect(() => {
-    if (!isLoaded) return;
+    if (!isClerkLoaded) {
+      authDebug("Waiting for Clerk to load before redirect");
+      return;
+    }
+
+    authDebug("Starting splash redirect timer", {
+      isSignedIn,
+      role,
+    });
 
     const timer = setTimeout(() => {
       if (isSignedIn) {
-        navigate("/home", { replace: true });
+        const destination = role === "admin" ? "/admin" : "/app";
+        authDebug("Redirecting signed-in user", { destination, role });
+        navigate(destination, { replace: true });
       } else {
+        authDebug("Redirecting anonymous user to login");
         navigate("/login", { replace: true });
       }
     }, 2500);
 
     return () => clearTimeout(timer);
-  }, [navigate, isLoaded, isSignedIn]);
+  }, [navigate, isClerkLoaded, isSignedIn, role]);
 
   useEffect(() => {
     const fallbackTimer = setTimeout(() => {
-      if (!isLoaded) {
+      if (!isClerkLoaded) {
+        authDebug("Fallback triggered: Clerk still not loaded, redirecting to login");
         navigate("/login", { replace: true });
       }
     }, 6000);
 
     return () => clearTimeout(fallbackTimer);
-  }, [isLoaded, navigate]);
+  }, [isClerkLoaded, navigate]);
 
   return (
     <div

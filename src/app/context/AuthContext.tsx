@@ -2,6 +2,28 @@ import { createContext, useContext, useState, useEffect, ReactNode } from "react
 import { useAuth as useClerkAuth, useClerk, useUser } from "@clerk/clerk-react";
 import * as api from "../services/api";
 
+type UserRole = "admin" | "user";
+
+const AUTH_DEBUG = import.meta.env.DEV || import.meta.env.VITE_DEBUG_AUTH === "true";
+const ADMIN_EMAILS = (import.meta.env.VITE_ADMIN_EMAILS || "24eg110d55@anurag.edu.in,yeshwanth3979@gmail.com")
+  .split(",")
+  .map((email: string) => email.trim().toLowerCase())
+  .filter(Boolean);
+
+function getRoleFromEmail(email?: string | null): UserRole {
+  if (!email) return "user";
+  return ADMIN_EMAILS.includes(email.toLowerCase()) ? "admin" : "user";
+}
+
+function authDebug(message: string, data?: unknown) {
+  if (!AUTH_DEBUG) return;
+  if (data !== undefined) {
+    console.log(`[AuthFlow] ${message}`, data);
+    return;
+  }
+  console.log(`[AuthFlow] ${message}`);
+}
+
 interface UserProfile {
   userId: string;
   email: string;
@@ -18,6 +40,10 @@ interface UserProfile {
 
 interface AuthContextType {
   user: UserProfile | null;
+  role: UserRole;
+  isAdmin: boolean;
+  isSignedIn: boolean;
+  isClerkLoaded: boolean;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, name: string) => Promise<void>;
@@ -37,45 +63,71 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const primaryEmail = clerkUser?.primaryEmailAddress?.emailAddress || clerkUser?.emailAddresses?.[0]?.emailAddress || null;
+  const role = getRoleFromEmail(primaryEmail);
+  const isAdmin = role === "admin";
+
   // Register Clerk token provider for backend API requests
   useEffect(() => {
+    authDebug("Registering API token provider", { isLoaded, isSignedIn });
+
     api.setAuthTokenProvider(async () => {
       if (!isLoaded || !isSignedIn) return null;
       return await getToken();
     });
 
-    return () => api.setAuthTokenProvider(null);
+    return () => {
+      authDebug("Clearing API token provider");
+      api.setAuthTokenProvider(null);
+    };
   }, [getToken, isLoaded, isSignedIn]);
 
   // Load/clear user profile based on Clerk auth state
   useEffect(() => {
+    authDebug("Clerk state changed", {
+      isLoaded,
+      isSignedIn,
+      role,
+      email: primaryEmail,
+    });
+
     if (!isLoaded) return;
 
     if (!isSignedIn) {
+      authDebug("No active session, clearing user profile");
       setUser(null);
       setLoading(false);
       return;
     }
 
+    authDebug("Active session found, refreshing profile");
     refreshProfile();
-  }, [isLoaded, isSignedIn]);
+  }, [isLoaded, isSignedIn, role, primaryEmail]);
 
   const refreshProfile = async () => {
     if (!isSignedIn) {
+      authDebug("refreshProfile skipped (not signed in)");
       setUser(null);
       setLoading(false);
       return;
     }
 
     try {
+      authDebug("Fetching profile from backend");
       setLoading(true);
       const { profile } = await api.getProfile();
+      authDebug("Profile loaded", {
+        userId: profile?.userId,
+        email: profile?.email,
+        role,
+      });
       setUser(profile);
     } catch (error) {
-      console.error("Failed to load profile:", error);
+      console.error("[AuthFlow] Failed to load profile:", error);
 
       // Fallback minimal profile from Clerk if backend profile call is unavailable
       if (clerkUser) {
+        authDebug("Using Clerk fallback profile");
         setUser({
           userId: clerkUser.id,
           email: clerkUser.primaryEmailAddress?.emailAddress || "",
@@ -91,6 +143,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
       }
     } finally {
+      authDebug("Profile loading complete");
       setLoading(false);
     }
   };
@@ -104,6 +157,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    authDebug("Signing out user");
     await clerkSignOut();
     api.signOut();
     setUser(null);
@@ -148,6 +202,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider
       value={{
         user,
+        role,
+        isAdmin,
+        isSignedIn: !!isSignedIn,
+        isClerkLoaded: !!isLoaded,
         loading,
         signIn,
         signUp,

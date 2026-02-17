@@ -30,7 +30,7 @@ export const router = createBrowserRouter([
     children: [
       {
         path: "/",
-        Component: Login,
+        Component: Splash,
       },
       {
         path: "/splash",
