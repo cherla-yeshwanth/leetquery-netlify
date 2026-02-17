@@ -46,6 +46,13 @@ async function apiRequest(
       // Send user's access token in a custom header (gateway only checks Authorization)
       headers["X-User-Token"] = token;
     }
+
+    if (DEBUG_API) {
+      console.log("API Auth State:", {
+        endpoint,
+        hasUserToken: !!token,
+      });
+    }
   }
 
   const options: RequestInit = {

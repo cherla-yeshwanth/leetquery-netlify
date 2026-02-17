@@ -5,6 +5,7 @@ import * as api from "../services/api";
 type UserRole = "admin" | "user";
 
 const AUTH_DEBUG = import.meta.env.DEV || import.meta.env.VITE_DEBUG_AUTH === "true";
+const CLERK_JWT_TEMPLATE = import.meta.env.VITE_CLERK_JWT_TEMPLATE as string | undefined;
 const ADMIN_EMAILS = (import.meta.env.VITE_ADMIN_EMAILS || "24eg110d55@anurag.edu.in,yeshwanth3979@gmail.com")
   .split(",")
   .map((email: string) => email.trim().toLowerCase())
@@ -73,7 +74,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     api.setAuthTokenProvider(async () => {
       if (!isLoaded || !isSignedIn) return null;
-      return await getToken();
+
+      let token = await getToken();
+
+      if (!token && CLERK_JWT_TEMPLATE) {
+        authDebug("Default Clerk token missing, trying template token", {
+          template: CLERK_JWT_TEMPLATE,
+        });
+        token = await getToken({ template: CLERK_JWT_TEMPLATE } as any);
+      }
+
+      authDebug("Resolved auth token", {
+        hasToken: !!token,
+        usingTemplate: !!CLERK_JWT_TEMPLATE,
+      });
+
+      return token;
     });
 
     return () => {
