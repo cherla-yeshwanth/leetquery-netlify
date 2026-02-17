@@ -1,27 +1,37 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router";
 import { motion } from "motion/react";
+import { useAuth as useClerkAuth } from "@clerk/clerk-react";
 import { useThemeEngine } from "../context/ThemeEngineContext";
-import { useAuth } from "../context/AuthContext";
 
 export function Splash() {
   const navigate = useNavigate();
   const { currentTheme } = useThemeEngine();
-  const { user, loading } = useAuth();
+  const { isLoaded, isSignedIn } = useClerkAuth();
 
   useEffect(() => {
-    if (!loading) {
-      const timer = setTimeout(() => {
-        // Redirect to home if authenticated, otherwise to login
-        if (user) {
-          navigate("/home");
-        } else {
-          navigate("/login");
-        }
-      }, 2500);
-      return () => clearTimeout(timer);
-    }
-  }, [navigate, user, loading]);
+    if (!isLoaded) return;
+
+    const timer = setTimeout(() => {
+      if (isSignedIn) {
+        navigate("/home", { replace: true });
+      } else {
+        navigate("/login", { replace: true });
+      }
+    }, 2500);
+
+    return () => clearTimeout(timer);
+  }, [navigate, isLoaded, isSignedIn]);
+
+  useEffect(() => {
+    const fallbackTimer = setTimeout(() => {
+      if (!isLoaded) {
+        navigate("/login", { replace: true });
+      }
+    }, 6000);
+
+    return () => clearTimeout(fallbackTimer);
+  }, [isLoaded, navigate]);
 
   return (
     <div
